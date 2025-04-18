@@ -1,18 +1,133 @@
 #include <iostream>
 #include <SDL2/SDL.h>
 #include <glad/glad.h>
+#include <vector>
 
+// SDL2 window parameters
 bool gQuit = false;
-int gScreenHeight = 640;
-int gScreenWidth = 480;
+int gScreenHeight = 480;
+int gScreenWidth = 640;
 SDL_Window* gGraphicsApplicationWindow = nullptr;
 SDL_GLContext gOpenGLContext = nullptr;
+
+// VAO/VBO handles
+GLuint g_VBO = 0;
+GLuint g_VAO = 0;
+
+const std::string g_vertex_shader_src = 
+    "#version 410 core\n"
+    "in vec4 position;\n"
+    "void main()\n"
+    "{\n"
+    "   gl_Position = vec4(position.x, position.y, position.z, position.w);\n"
+    "}\n";
+
+const std::string g_fragment_shader_src = 
+    "#version 410 core\n"
+    "out vec4 color;\n"
+    "void main()\n"
+    "{\n"
+    "   color = vec4(1.0f, 0.5f, 0.0f, 1.0f);\n"
+    "}\n";
+
+// program object for shaders
+GLuint g_shader_program = 0;
+GLuint g_graphics_shader_pipeline = 0;
+
 
 void GetOpenGLVersionInfo() {
    std::cout << glGetString(GL_VENDOR) << std::endl;
    std::cout << glGetString(GL_RENDERER) << std::endl;
    std::cout << glGetString(GL_VERSION) << std::endl;
    std::cout << glGetString(GL_SHADING_LANGUAGE_VERSION) << std::endl;
+}
+
+void vertex_specification() {
+    // vertex data starts on the CPU
+    const std::vector<GLfloat> vertex_positions {
+        -0.8f, -0.8f, -0.0f,
+        0.8f,  -0.8f,  0.0f,
+        0.0f,   0.8f,  0.0f
+    };
+
+    // vertex data is sent to the GPU
+    // step 1: create VAO
+    glGenVertexArrays(1, &g_VAO);
+    glBindVertexArray(g_VAO);
+
+    // step 2: create VBO and copy over data
+    glGenBuffers(1, &g_VBO);
+    glBindBuffer(GL_ARRAY_BUFFER, g_VBO);
+    glBufferData(
+        GL_ARRAY_BUFFER,
+        vertex_positions.size() * sizeof(GLfloat),
+        vertex_positions.data(),
+        GL_STATIC_DRAW
+    );
+
+    // step 3: enable the desired attribute (for position) in the VAO
+    glEnableVertexAttribArray(0);
+    
+    // step 4: specify vertex data format in VAO 
+    glVertexAttribPointer(
+        0,
+        3, 
+        GL_FLOAT,
+        GL_FALSE,
+        3 * sizeof(GLfloat),
+        (GLvoid*)0
+    );
+
+    // the data should be fully copied over to GPU memory
+    //step 6: unbind the VBO/VAO for the next draw call
+    glBindVertexArray(0);
+    glDisableVertexAttribArray(0);
+}
+
+GLuint compile_shader(GLuint type, const std::string& raw_src) {
+    GLuint shader_object; 
+    if(type == GL_VERTEX_SHADER) {
+        shader_object = glCreateShader(GL_VERTEX_SHADER);
+    } else if(type == GL_FRAGMENT_SHADER) {
+        shader_object = glCreateShader(GL_FRAGMENT_SHADER);
+    } 
+    // compile the shader
+   
+    const char* src = raw_src.c_str();
+    glShaderSource(shader_object, 1, &src, nullptr);
+    glCompileShader(shader_object);
+    return shader_object; 
+}
+
+
+GLuint create_shader_program(const std::string& vertex_shader_src,
+                             const std::string& fragment_shader_src) {
+
+    // glCreateProgram creates empty program object (which is our pipeline)
+    // we need to populate it with our shaders
+
+    GLuint program_object = glCreateProgram();
+    
+    // create shader of type VERTEX_SHADER using the provided source code
+    GLuint vertex_shader = compile_shader(GL_VERTEX_SHADER, vertex_shader_src);
+    GLuint fragment_shader = compile_shader(GL_FRAGMENT_SHADER, fragment_shader_src);
+
+    // attach the shaders to the program object
+    glAttachShader(program_object, vertex_shader);
+    glAttachShader(program_object, fragment_shader);
+    
+    // link the program object
+    glLinkProgram(program_object);
+
+    // TODO: still need to delete and detach the shaders
+    glDeleteShader(vertex_shader);
+    glDeleteShader(fragment_shader);
+
+    return program_object;
+}
+
+void create_graphics_pipeline() {
+    g_graphics_shader_pipeline = create_shader_program(g_vertex_shader_src, g_fragment_shader_src);
 }
 
 void initialize() {
@@ -62,9 +177,20 @@ void process_inputs() {
     }
 }
 
-void pre_draw() {}
+// pre_draw is responsible for setting oGL state
+void pre_draw() {
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+    glViewport(0, 0, gScreenWidth, gScreenHeight);
+    glClearColor(1.f, 1.f, 0.f, 1.f); 
+
+    glUseProgram(g_graphics_shader_pipeline);
+}
+
 void draw() {
-    SDL_GL_SwapWindow(gGraphicsApplicationWindow);
+    glBindVertexArray(g_VAO);
+    glBindBuffer(GL_ARRAY_BUFFER, g_VBO);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
 }
 
 void main_loop() {
@@ -72,6 +198,7 @@ void main_loop() {
         process_inputs();
         pre_draw();
         draw(); 
+        SDL_GL_SwapWindow(gGraphicsApplicationWindow); // update the screen
     }
 }
 
@@ -83,6 +210,8 @@ void cleanup() {
 
 int main() {
   initialize();
+  vertex_specification();
+  create_graphics_pipeline();
   main_loop();
   cleanup();     
     
