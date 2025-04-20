@@ -2,6 +2,7 @@
 #include <SDL2/SDL.h>
 #include <glad/glad.h>
 #include <vector>
+#include <fstream>
 
 // SDL2 window parameters
 bool gQuit = false;
@@ -14,26 +15,24 @@ SDL_GLContext gOpenGLContext = nullptr;
 GLuint g_VBO = 0;
 GLuint g_VAO = 0;
 
-const std::string g_vertex_shader_src = 
-    "#version 410 core\n"
-    "in vec4 position;\n"
-    "void main()\n"
-    "{\n"
-    "   gl_Position = vec4(position.x, position.y, position.z, position.w);\n"
-    "}\n";
-
-const std::string g_fragment_shader_src = 
-    "#version 410 core\n"
-    "out vec4 color;\n"
-    "void main()\n"
-    "{\n"
-    "   color = vec4(1.0f, 0.5f, 0.0f, 1.0f);\n"
-    "}\n";
-
 // program object for shaders
 GLuint g_shader_program = 0;
 GLuint g_graphics_shader_pipeline = 0;
 
+std::string load_shader_src(const std::string& filename) {
+    std::string ret = "";
+    std::string line = "";
+    std::ifstream raw_file(filename.c_str());
+    if(raw_file.is_open()) {
+        while(std::getline(raw_file, line)) {
+            ret += line + "\n";
+        }
+    raw_file.close();
+    } else {
+        std::cout << "Failed to open file: " << filename << std::endl;
+    }
+    return ret;
+}
 
 void GetOpenGLVersionInfo() {
    std::cout << glGetString(GL_VENDOR) << std::endl;
@@ -109,13 +108,13 @@ GLuint create_shader_program(const std::string& vertex_shader_src,
     GLuint program_object = glCreateProgram();
     
     // create shader of type VERTEX_SHADER using the provided source code
-    GLuint vertex_shader = compile_shader(GL_VERTEX_SHADER, vertex_shader_src);
+    GLuint vertex_shader = compile_shader(GL_VERTEX_SHADER, vertex_shader_src); 
     GLuint fragment_shader = compile_shader(GL_FRAGMENT_SHADER, fragment_shader_src);
 
     // attach the shaders to the program object
     glAttachShader(program_object, vertex_shader);
     glAttachShader(program_object, fragment_shader);
-    
+
     // link the program object
     glLinkProgram(program_object);
 
@@ -127,7 +126,9 @@ GLuint create_shader_program(const std::string& vertex_shader_src,
 }
 
 void create_graphics_pipeline() {
-    g_graphics_shader_pipeline = create_shader_program(g_vertex_shader_src, g_fragment_shader_src);
+    std::string vertex_shader_src = load_shader_src("./shaders/vert.glsl");
+    std::string fragment_shader_src = load_shader_src("./shaders/frag.glsl");
+    g_graphics_shader_pipeline = create_shader_program(vertex_shader_src, fragment_shader_src);
 }
 
 void initialize() {
@@ -182,7 +183,8 @@ void pre_draw() {
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
     glViewport(0, 0, gScreenWidth, gScreenHeight);
-    glClearColor(1.f, 1.f, 0.f, 1.f); 
+    glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
+    glClearColor(0.f, 0.2f, 0.2f, 1.f); 
 
     glUseProgram(g_graphics_shader_pipeline);
 }
